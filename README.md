@@ -39,14 +39,42 @@ App runs at http://localhost:1234.
 
 ## Proofs of completion
 
-Screenshots are in [`screenshots/`](screenshots/):
+### Setup
 
-- [ ] `01-dapp-running.png` — the dApp on devnet, account #0 funded
-- [ ] `02-issue-token.png` — custom xUDT issued, showing the tx hash and xUDT args
-- [ ] `03-query-failed.png` — query by the issuer's **lock script hash alone** → "not found"
-- [ ] `04-query-token.png` — query by the **full xUDT args** → the token cells and their holders
-- [ ] `05-transfer.png` — transfer to account #1
-- [ ] `06-query-after-transfer.png` — same token, now split across two holders
+Node v24.11.1, npm 11.12.1 and git 2.52.0 in place, then `@offckb/cli` installed and
+reporting 0.4.13:
+
+![Toolchain versions](screenshots/01-toolchain-versions.png)
+![OffCKB installed](screenshots/02-offckb-installed.png)
+
+### 1 & 2 — Running the dApp and issuing a custom xUDT
+
+Account #0 holds 41,465,093 CKB on the devnet. Issuing 42 tokens returns the transaction
+hash, the xUDT args that identify the token, and the new token cell — 146 CKB of capacity,
+carrying my lock script and the xUDT type script:
+
+![Issue token result](screenshots/03-issue-token-result.png)
+
+### 3 — Querying the token cell (the first attempt failed)
+
+My first query returned **"not found, wait for new blocks and try again."** The tutorial's
+recap says to query by the issuer's Lock Script Hash, and that is exactly what fails: the
+args in the box stop at the 32-byte hash:
+
+![Query not found](screenshots/04-query-not-found.png)
+
+Re-querying with the full 36-byte args — the lock hash **plus** the `00000000` flags —
+returns both token cells, each holding 42 tokens under the same holder lock args:
+
+![Query success](screenshots/05-query-success-two-cells.png)
+
+### 4 — Transferring tokens by replacing the Lock Script
+
+Two transfers of 10 tokens each went to devnet account #1. Both are committed in block
+27665; the transaction hashes, fees and resulting cells are in the table below, read back
+from the chain with `findCellsByType`.
+
+> Screenshot of the Step 3 result and of the post-transfer query still to be added here.
 
 ### The token
 
