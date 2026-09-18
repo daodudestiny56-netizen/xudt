@@ -148,6 +148,25 @@ Each of these I ran into or verified against the devnet, not just read:
 
 ---
 
+## What I built on top: [xUDT Studio](studio/)
+
+Following the tutorial taught me the three operations; `studio/` is my own app that puts
+them together. It starts from an account rather than from a token id: pick a devnet
+account, see its CKB and every xUDT it holds, issue, transfer, then inspect any token's
+holders cell by cell.
+
+It also fixes the problems listed above — args that explain themselves instead of
+"not found", capacity computed from the real scripts instead of a hard-coded 61 CKB,
+integer-only amounts, devnet by default, and private keys that never touch disk.
+
+The chain logic lives in `studio/src/ckb.ts` with no React in it, so `npm run smoke`
+runs the same functions the browser runs against a live devnet and asserts on the
+results. Details in [studio/README.md](studio/README.md).
+
+```powershell
+cd studio; npm install; $env:NETWORK='devnet'; npm start   # http://localhost:1235
+```
+
 ## Reflection
 
 <!-- Write this yourself, in your own voice — the campaign asks for it and it is the part
