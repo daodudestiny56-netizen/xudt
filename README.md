@@ -70,9 +70,9 @@ returns both token cells, each holding 42 tokens under the same holder lock args
 
 ### 4 — Transferring tokens by replacing the Lock Script
 
-Two transfers of 10 tokens each went to devnet account #1. Both are committed in block
-27665; the transaction hashes, fees and resulting cells are in the table below, read back
-from the chain with `findCellsByType`.
+Three transfers of 10 tokens each went to devnet account #1. A transfer never edits a
+balance: it consumes my token cells and creates new ones, one under the receiver's lock
+script and one back to me for the change. Swapping the lock script *is* the transfer.
 
 > Screenshot of the Step 3 result and of the post-transfer query still to be added here.
 
@@ -84,37 +84,54 @@ from the chain with `findCellsByType`.
 | Issuer lock script hash | `0x7de82d61a7eb2ec82b0dc653e558ba120efcbfbb44dac87c12972d05bf250653` |
 | **xUDT args (token ID)** | `0x7de82d61a7eb2ec82b0dc653e558ba120efcbfbb44dac87c12972d05bf25065300000000` |
 | xUDT code hash (devnet) | `0x1a1e4fef34f5982906f745b048fe7b1089647e82346074e0f32c2ece26cf6b1e` |
-| Total supply issued | 84 (2 × 42) |
+| Total supply issued | 210 (5 × 42) |
 
 The token ID is the issuer's lock script hash **plus 4 bytes** (`00000000`, the xUDT
 flags field — zero means no extensions). Those 4 bytes matter; see below.
 
 ### On-chain record
 
-Read back from the devnet with `findCellsByType` after each step:
+Every transaction touching this token, reconstructed from the devnet by walking live
+cells back through their inputs — no block explorer involved:
 
-| Step | Tx | Block | In → Out | Fee |
-|---|---|---|---|---|
-| Issue 42 | `0x3b2d53c8…bf4428` | 24982 | 1 → 2 | 606 shannons |
-| Issue 42 | `0xfd015fc2…f701e4` | 27519 | 1 → 2 | 606 shannons |
-| Transfer 10 | `0xfdf8f190…161f5c` | 27665 | 3 → 3 | 908 shannons |
-| Transfer 10 | `0xd6301861…9880dc` | 27665 | 2 → 3 | 864 shannons |
+| # | Action | Tx | Block | In → Out | Fee | Result |
+|---|---|---|---|---|---|---|
+| 1 | Issue 42 | `0x3b2d53c8…bf4428` | 24982 | 1 → 2 | 606 | 42 to me |
+| 2 | Issue 42 | `0xfd015fc2…f701e4` | 27519 | 1 → 2 | 606 | 42 to me |
+| 3 | Transfer 10 | `0xfdf8f190…161f5c` | 27665 | 3 → 3 | 908 | 10 out, 74 change |
+| 4 | Transfer 10 | `0xd6301861…9880dc` | 27665 | 2 → 3 | 864 | 10 out, 64 change |
+| 5 | Issue 42 | `0x72d28369…8819ac` | 28050 | 1 → 2 | 606 | 42 to me |
+| 6 | Transfer 10 | `0x10967111…5c0c9a` | 28068 | 3 → 3 | 908 | 10 out, 96 change |
+| 7 | Issue 42 | `0x6d36acd9…d25852` | 28178 | 1 → 2 | 606 | 42 to me |
+| 8 | Issue 42 | `0xd47b9da8…82d6aa` | 28180 | 1 → 2 | 606 | 42 to me |
 
-Final live cells for this token:
+Five issues (210 tokens) and three transfers (30 sent). Live cells now:
 
 ```
+amount=96  lock args 0x8e42b199…4297   (account #0, change from tx 6)
+amount=42  lock args 0x8e42b199…4297   (account #0, from tx 7)
+amount=42  lock args 0x8e42b199…4297   (account #0, from tx 8)
 amount=10  lock args 0x758d311c…457d   (account #1)
 amount=10  lock args 0x758d311c…457d   (account #1)
-amount=64  lock args 0x8e42b199…4297   (account #0, change)
+amount=10  lock args 0x758d311c…457d   (account #1)
 ```
 
-84 in, 84 out. Each token cell holds exactly **146 CKB** of capacity: it pays its own
-storage for the lock script, the xUDT type script and the 16-byte amount.
+210 issued, 210 live. Two details that only make sense once you see this table:
 
-The first transfer consumed **both** 42-token cells and produced one 10-token cell for
-the receiver plus a 74-token change cell for me; the second consumed that 74 and left 64.
-Nothing anywhere records "account #1 owns 20" — that balance only exists as the sum of
-the cells whose lock script account #1 can unlock.
+**Amounts never merge.** My 180 tokens sit in three cells (96 + 42 + 42), and account
+#1's 30 sit in three cells of 10. "Balance" is a sum the UI computes, not a number the
+chain stores. Tx 3 shows the flip side: transferring 10 consumed **both** 42-token cells
+as inputs, because the wallet gathers whatever cells it needs and writes the remainder
+back as change.
+
+**Each cell pays its own rent.** All six lock up exactly **146 CKB** — 8 bytes of
+capacity field, the 53-byte lock script, the 69-byte xUDT type script, and 16 bytes of
+amount, at 1 CKB per byte. 876 CKB is immobilised to hold 210 tokens. Consolidating
+those six cells into two would free up 584 CKB, which is a real consideration on a
+network where storage is the scarce resource.
+
+Fees ran 606 shannons for an issue and 864–908 for a transfer — about 0.000006 CKB,
+since `completeFeeBy(signer, 1000)` sets a rate per 1000 bytes rather than a flat fee.
 
 ---
 
@@ -169,14 +186,21 @@ cd studio; npm install; $env:NETWORK='devnet'; npm start   # http://localhost:12
 
 ## Reflection
 
-<!-- Write this yourself, in your own voice — the campaign asks for it and it is the part
-     that decides the prize. Things you actually experienced, worth drawing on:
-     - the failed query, and what the 4 extra bytes turned out to be
-     - clicking Issue twice giving two separate cells instead of one balance
-     - a transfer being new cells with a different lock script, not a balance update
-     - every token cell paying 146 CKB of its own rent
-     - what that makes easy or hard compared to an ERC-20
-     Then delete this comment. -->
+<!-- Write this yourself, in your own voice. The campaign asks for it explicitly, and it
+     is the part that decides the prize. Questions worth answering, each tied to
+     something that actually happened above:
+
+     1. The query that returned "not found" — what did you assume the token's id was,
+        and what was it really? Why do you think the docs describe it the other way?
+     2. You issued five times and got five separate cells, not one growing balance.
+        When did that click, and what does it change about how you'd write a wallet?
+     3. A transfer swaps a lock script. What can you do with that which an ERC-20
+        balance mapping makes hard?
+     4. 876 CKB is locked up to hold 210 tokens. Is paying rent for your own storage
+        a fair trade? What does it prevent?
+     5. What would you build with this now — and what stopped you today?
+
+     Answer in your words, keep the bits you got wrong, and delete this comment. -->
 
 ---
 
